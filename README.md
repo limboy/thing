@@ -20,7 +20,7 @@ Thing is an ORM (active record) based on sqlalchemy, with validations and callba
 Why another ORM ?
 =================
 
-sqlalchemy itself integrates an ORM, using session, which is not so comfortable in use. but i can tolerant, yes, as a Chinese i can tolerant many things. what drive me to write this ORM is it's lack of limit / offset when calling `all()` like this:
+sqlalchemy itself integrates an ORM, using session, which is not so comfortable to use. but i can tolerant, yes, as a Chinese i can tolerant many things. what drive me to write this ORM is it's lack of limit / offset when calling `all()` like this:
 
 ```
 user = session.query(User).filter(id=1).one()
