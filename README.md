@@ -129,6 +129,7 @@ member.email = 'foo@bar.com'
 member.save()
 print member.saved # True
 print member.email # foo@bar.com
+```
 
 Validation
 ----------
