@@ -38,9 +38,7 @@ virtualenvwrapper is suggested.
 ```
 $ mkvirtualenv thing
 $ cdvirtualenv
-$ git clone git://github.com/lzyy/thing.git
-$ cd thing
-$ python setup.py develop
+$ pip install "git+git://github.com/lzyy/thing.git"
 ```
 
 Features
