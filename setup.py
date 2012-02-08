@@ -2,9 +2,9 @@ from setuptools import setup
 import os
 
 setup(
-    name = 'Thing',
+    name = 'thing',
     version = '0.1',
-    url = 'http://github.com/lzyy/thing/',
+    url = 'http://github.com/lzyy/thing',
     license = 'BSD',
     author = 'lzyy',
     author_email = 'healdream@gmail.com',
@@ -12,7 +12,7 @@ setup(
     long_description = open('./README.md').read(),
     zip_safe = False,
     platforms = 'any',
-    packages = ["src"],
+    packages = ["thing"],
     include_package_data = True,
     install_requires = [
         'sqlalchemy',
