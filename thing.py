@@ -136,7 +136,7 @@ class Thing(formencode.Schema):
             db.execute(query)
 
             # after update
-            sig = signal('{0}.before_update'.format(classname))
+            sig = signal('{0}.after_update'.format(classname))
         else:
             # before insert
             sig = signal('{0}.before_insert'.format(classname))
