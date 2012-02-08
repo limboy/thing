@@ -109,6 +109,8 @@ class ThingTest(unittest.TestCase):
         answer2.content = 'fox'
         answer2.save()
 
+        answers = member.answers.findall()
+        self.assertEqual(len(answers), 2)
         for answer in member.answers.findall():
             if answer.id == 1:
                 self.assertEqual(answer.title, 'foo')

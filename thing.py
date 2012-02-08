@@ -85,6 +85,13 @@ class Thing(formencode.Schema):
         else:
             object.__setattr__(self, key, val)
 
+    def __len__(self):
+        if self._results:
+            return len(self._results)
+        elif self._current_item:
+            return 1
+        return 0
+
     def save(self, db_section = None):
         db = self._default_db if not db_section else self._dbs[db_section]
         classname = self.__class__.__name__.lower()
@@ -210,7 +217,6 @@ class Thing(formencode.Schema):
             query = select([self.table], and_(*self._filters))
         self._current_item = db.execute(query).first()
         return self
-
 
     def findall(self, limit = 20, offset = 0, db_section = None):
         db = self._default_db if not db_section else self._dbs[db_section]
