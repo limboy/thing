@@ -7,6 +7,7 @@ from blinker import signal
 
 engine = create_engine('mysql://root:123456@localhost:3306/test')
 conn = engine.connect()
+vote_before_insert = signal('vote.before_insert')
 
 class Member(thing.Thing):
     email = validators.Email(messages = {'noAt': u'invalid email'})
@@ -14,22 +15,24 @@ class Member(thing.Thing):
     def answers(self):
         return Answer({'master': engine}).where('member_id', '=', self.id)
 
-    '''
-    @member_before_insert.connect
-    def _member_before_insert(member, data):
-        member.errors = {'invalid_invite': u'无效的邀请码'}
-    '''
-
 class Answer(thing.Thing):
     @property
     def votes(self):
         return Vote({'master': engine}).where('answer_id', '=', self.id)
+
+    @vote_before_insert.connect
+    def _vote_before_insert(vote, data):
+        if vote.answer.title == 'test':
+            vote.errors = {'answer': 'signal test'}
 
 class Vote(thing.Thing):
     @property
     def member(self):
         return Member({'master': engine}).where('id', '=', self.member_id).find()
 
+    @property
+    def answer(self):
+        return Answer({'master': engine}).where('id', '=', self.answer_id).find()
 
 def create_table():
     conn.execute('''
@@ -152,7 +155,20 @@ class ThingTest(unittest.TestCase):
         member.password = '123'
         member.email = 'foo'
         member.save()
-        self.assertEqual(member.errors['email'].msg, 'invalid email')
+        self.assertEqual(member.errors['email'], 'invalid email')
+
+    def test_signal(self):
+        answer = answer_model.reset()
+        answer.title = 'test'
+        answer.content = 'test'
+        answer.member_id = 1
+        answer.save()
+
+        vote = vote_model.reset()
+        vote.answer_id = 1
+        vote.member_id = 1
+        vote.save()
+        self.assertEqual(vote.errors['answer'], 'signal test')
 
     def tearDown(self):
         conn.execute('''

@@ -8,10 +8,38 @@ from blinker import signal
 class ThingException(Exception):
     pass
 
+class ThingError(object):
+    '''
+    for future extend
+    '''
+
+    def __init__(self):
+        self._errors = {}
+
+    def __get__(self, instance, type = None):
+        errors = {}
+        for key, val in self._errors.items():
+            errors[key] = val.msg
+        return errors
+
+    def __set__(self, instance, error):
+        self._errors = {}
+        for key, val in error.items():
+            if isinstance(val ,basestring):
+                val = formencode.api.Invalid(val, value = None, state = None)
+            self._errors[key] = val
+
 class Thing(formencode.Schema):
-    allow_extra_fields = True
+
+    # change this if your pk is not id
+    # current doesn't support multi pk
     _primary_key = 'id'
+
+    # if leave it as None, lower classname will be used
     _tablename = None
+
+    errors = ThingError()
+    allow_extra_fields = True
 
     def __init__(self, engines):
         """
@@ -34,7 +62,7 @@ class Thing(formencode.Schema):
         self._results = []
         self._current_index = -1
         self._unsaved_items = {}
-        self.errors = {} # can be update outside
+        self.errors = {}
 
     def __del__(self):
         for key, engine in self._engines.items():
@@ -47,6 +75,8 @@ class Thing(formencode.Schema):
     def  __getattr__(self, key):
         if key in self._current_item:
             return getattr(self._current_item, key)
+        elif key in self._unsaved_items:
+            return self._unsaved_items[key]
         raise ThingException('key:{key} not found'.format(key = key))
 
     def __setattr__(self, key, val):
