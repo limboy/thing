@@ -1,3 +1,4 @@
+<pre>
      /\  \         /\__\          ___        /\__\         /\  \    
      \:\  \       /:/  /         /\  \      /::|  |       /::\  \   
       \:\  \     /:/__/          \:\  \    /:|:|  |      /:/\:\  \  
@@ -8,6 +9,8 @@
    \/__/            /:/  /    \:\__\         |::/  /     \:\/:/  /  
                    /:/  /      \/__/         /:/  /       \::/  /   
                    \/__/                     \/__/         \/__/    
+
+</pre>
 
 What is Thing ?
 ===============
@@ -32,7 +35,8 @@ Install
 
 virtualenvwrapper is suggested.
 
-```$ mkvirtualenv thing
+```
+$ mkvirtualenv thing
 cdvirtualenv
 pip install -e https://github.com/lzyy/thing.git#egg=thing
 ```
@@ -54,7 +58,8 @@ Define Model
 
 if we have a table "member", and has an email field in it, and the relationship with answer is one-to-many. we can define it like this:
 
-```import thing
+```
+import thing
 from formencode import validators
 
 class Member(thing.Thing):
@@ -67,7 +72,8 @@ class Member(thing.Thing):
 
 above class can be used like this
 
-```engine = create_engine('mysql://root:123456@localhost:3306/test')
+```
+engine = create_engine('mysql://root:123456@localhost:3306/test')
 member = Member({'master': engine}).find(1)
 
 for answer in member.answers.where('id', '>', 10).findall(limit=10, offset=0):
@@ -80,7 +86,8 @@ for answer in member.answers.where('status', '=', -1).findall():
 
 we can also create a Base Model to avoid pass engines to models everytime when init.
 
-```import thing
+```
+import thing
 from sqlalchemy import create_engine
 engine = create_engine('mysql://root:123456@localhost:3306/test')
 
@@ -104,7 +111,8 @@ class BaseThing(thing.Thing):
 Create
 ------
 
-```member = Member({'master': engine})
+```
+member = Member({'master': engine})
 member.email = 'foo@bar.com'
 member.password = '123'
 member.save()
@@ -115,7 +123,8 @@ print member.email # foo@bar.com
 Update
 ------
 
-```member = Member({'master': engine}).find(1)
+```
+member = Member({'master': engine}).find(1)
 member.email = 'foo@bar.com'
 member.save()
 print member.saved # True
@@ -124,7 +133,8 @@ print member.email # foo@bar.com
 Validation
 ----------
 
-```member = Member({'master': engine})
+```
+member = Member({'master': engine})
 member.password = '123'
 member.email = 'foo'
 member.save()
@@ -147,7 +157,8 @@ there are 6 callbacks.
 
 if an answer can be voted, and if answer doesn't exists, vote failed. we can do it like this:
 
-```import signal
+```
+import signal
 
 vote_before_insert = signal('vote.before_insert')
 
