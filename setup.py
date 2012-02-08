@@ -1,4 +1,5 @@
 from setuptools import setup
+import os
 
 setup(
     name='Thing',
@@ -8,7 +9,7 @@ setup(
     author='lzyy',
     author_email='healdream@gmail.com',
     description='a tiny active record orm based on sqlalchemy',
-    long_description=__doc__,
+    long_description=open('./README.md').read(),
     zip_safe=False,
     platforms='any',
     install_requires=[
