@@ -164,15 +164,20 @@ class Thing(formencode.Schema):
         if not hasattr(self, '_table'):
             self._table = Table(self._tablename, MetaData(), autoload = True, autoload_with = self._default_engine)
         return self._table
-        
+
     def validate(self, fields = None):
-        validate_items = self._unsaved_items
+        current_fields = self.__class__.fields
+        saved_fields = {}
         if fields:
-            validate_items = {k:v for k,v in self._unsaved_items.items() if k in fields}
+            for key, val in current_fields.items():
+                if key not in fields:
+                    saved_fields[key] = current_fields.pop(key)
         try:
-            self.to_python(validate_items)
+            self.to_python(self._unsaved_items)
         except formencode.Invalid, e:
             self.errors = e.error_dict
+        for key, val in saved_fields.items():
+            current_fields[key] = val
         if self.errors:
             return False
         return True
