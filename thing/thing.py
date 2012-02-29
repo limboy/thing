@@ -165,9 +165,12 @@ class Thing(formencode.Schema):
             self._table = Table(self._tablename, MetaData(), autoload = True, autoload_with = self._default_engine)
         return self._table
         
-    def validate(self):
+    def validate(self, fields = None):
+        validate_items = self._unsaved_items
+        if fields:
+            validate_items = {k:v for k,v in self._unsaved_items.items() if k in fields}
         try:
-            self.to_python(self._unsaved_items)
+            self.to_python(validate_items)
         except formencode.Invalid, e:
             self.errors = e.error_dict
         if self.errors:
