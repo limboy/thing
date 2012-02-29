@@ -109,12 +109,8 @@ class Thing(formencode.Schema):
             return self
 
         # validation
-        try:
-            self.to_python(self._unsaved_items)
-        except formencode.Invalid, e:
-            self.errors = e.error_dict
-        if self.errors:
-            return self.errors
+        if not self.validate():
+            return self
 
         # after validation
         sig = signal('{0}.after_validation'.format(classname))
@@ -168,6 +164,15 @@ class Thing(formencode.Schema):
         if not hasattr(self, '_table'):
             self._table = Table(self._tablename, MetaData(), autoload = True, autoload_with = self._default_engine)
         return self._table
+        
+    def validate(self):
+        try:
+            self.to_python(self._unsaved_items)
+        except formencode.Invalid, e:
+            self.errors = e.error_dict
+        if self.errors:
+            return False
+        return True
 
     def where(self, field, operation, val):
         # check if field has function in it
