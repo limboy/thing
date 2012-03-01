@@ -49,7 +49,7 @@ class Thing(formencode.Schema):
         self._engines = engines
         self._dbs = {}
         for key, engine in self._engines.items():
-            self._dbs[key] = engine.connect()
+            self._dbs[key] = engine
         self._default_engine = self._engines[self._engines.keys()[0]]
         self._default_db = self._dbs[self._dbs.keys()[0]]
         self._init_env()
@@ -63,10 +63,6 @@ class Thing(formencode.Schema):
         self._current_index = -1
         self._unsaved_items = {}
         self.errors = {}
-
-    def __del__(self):
-        for key, engine in self._engines.items():
-            self._dbs[key].close()
 
     @property
     def saved(self):
