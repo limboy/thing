@@ -247,7 +247,7 @@ class Thing(formencode.Schema):
         
     def count(self, db_section = None):
         db = self._default_db if not db_section else self._dbs[db_section]
-        query = select([func.count(getattr(self.table.c, self._primary_key)], and_(*self._filters))
+        query = select([func.count(getattr(self.table.c, self._primary_key))], and_(*self._filters))
         return db.execute(query).scalar()
 
     def reset(self):
