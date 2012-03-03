@@ -215,7 +215,14 @@ class Thing(formencode.Schema):
 
     def select(self, fields):
         for field in fields:
-            self._selected_fields.append(getattr(self.table.c, field))
+            field_obj = None
+            if field.find('(') != -1:
+                sql_func = getattr(func, field[:field.find('(')])
+                field = field[field.find('(')+1, -1]
+                field_obj = sql_func(getattr(self.table.c, field))
+            else:
+                field_obj = getattr(self.table.c, field)
+            self._selected_fields.append(field_obj)
         return self
 
     def find(self, val = None, db_section = None):
@@ -237,6 +244,11 @@ class Thing(formencode.Schema):
         self._results = db.execute(query).fetchall()
 
         return self
+        
+    def count(self, db_section = None):
+        db = self._default_db if not db_section else self._dbs[db_section]
+        query = select([func.count(getattr(self.table.c, self._primary_key)], and_(*self._filters))
+        return db.execute(query).scalar()
 
     def reset(self):
         self._init_env()
