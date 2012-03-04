@@ -152,6 +152,10 @@ class Thing(formencode.Schema):
 
         self._unsaved_items = {}
         return primary_key_val
+        
+    def delete(self, db_section = None):
+        db = self._default_db if not db_section else self._dbs[db_section]
+        return db.execute(self.table.delete(and_(*self._filters))).rowcount
 
     @property
     def table(self):
