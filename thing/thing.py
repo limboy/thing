@@ -239,6 +239,8 @@ class Thing(formencode.Schema):
         else:
             query = select([self.table], and_(*self._filters))
         self._current_item = db.execute(query).first()
+        # empty current filter
+        self._filters = []
         return self
 
     def findall(self, limit = 20, offset = 0, db_section = None):
@@ -249,6 +251,8 @@ class Thing(formencode.Schema):
 
         query = query.order_by(self._order_by).limit(limit).offset(offset)
         self._results = db.execute(query).fetchall()
+        # empty current filter
+        self._filters = []
         return self
 
     def get_field(self, field):
