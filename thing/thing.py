@@ -152,7 +152,7 @@ class Thing(formencode.Schema):
 
         self._unsaved_items = {}
         return primary_key_val
-        
+
     def delete(self, db_section = None):
         db = self._default_db if not db_section else self._dbs[db_section]
         return db.execute(self.table.delete(and_(*self._filters))).rowcount
@@ -197,11 +197,14 @@ class Thing(formencode.Schema):
                    '>=': '__ge__',
                    '<': '__lt__',
                    '<=': '__le__',
-                   '!=': '__ne__'}
+                   '!=': '__ne__',
+                   'in': 'in_',
+                   }
 
         for op, op_method in op_dict.items():
             if op == operation:
                 operation = op_method
+                break
 
         self._filters.append(getattr(field_obj, operation)(val))
         return self
@@ -246,9 +249,21 @@ class Thing(formencode.Schema):
 
         query = query.order_by(self._order_by).limit(limit).offset(offset)
         self._results = db.execute(query).fetchall()
-
         return self
-        
+
+    def get_field(self, field):
+        field_content = []
+        for result in self._results:
+            field_content.append(getattr(result, field))
+        return field_content
+
+    def __repr__(self):
+        if self._results:
+            return repr(self._results)
+        if self._current_item:
+            return repr(self._current_item)
+        return repr(self.__class__)
+
     def count(self, db_section = None):
         db = self._default_db if not db_section else self._dbs[db_section]
         query = select([func.count(getattr(self.table.c, self._primary_key))], and_(*self._filters))
