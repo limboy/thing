@@ -260,6 +260,12 @@ class Thing(formencode.Schema):
         for result in self._results:
             field_content.append(getattr(result, field))
         return field_content
+        
+    def to_dict(self):
+        d = {}
+        for column_name in self.table.columns.keys():
+            d[column_name] = getattr(self._current_item, column_name)
+        return d
 
     def __repr__(self):
         if self._results:
