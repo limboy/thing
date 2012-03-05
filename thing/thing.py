@@ -105,17 +105,21 @@ class Thing(formencode.Schema):
         if self._find_fields:
             for i, val in enumerate(self._find_fields):
                 self.where(val, '=', args[i])
+            self._find_fields = []
             return self.find()
         if self._findall_fields:
             for i, val in enumerate(self._findall_fields):
                 self.where(val, '=', args[i])
+            self._findall_fields = []
             return self.findall(**kwargs)
         if self._count_by_fields:
             for i, val in enumerate(self._count_by_fields):
                 self.where(val, '=', args[i])
+            self._count_by_fields = []
             return self.count()
         if self._findall_in_field:
             self.where(self._findall_in_field, 'in', args[0])
+            self._findall_in_field = None
             return self.findall()
         return self
 
