@@ -63,6 +63,11 @@ class Thing(formencode.Schema):
         self._current_index = -1
         self._unsaved_items = {}
         self.errors = {}
+        self._find_fields = []
+        self._findall_fields = []
+        self._count_by_fields = []
+        self._findall_in_field = None
+
 
     @property
     def saved(self):
@@ -73,7 +78,46 @@ class Thing(formencode.Schema):
             return getattr(self._current_item, key)
         elif key in self._unsaved_items:
             return self._unsaved_items[key]
+        elif key[:8] == 'find_by_':
+            if key.find('_and_') == -1:
+                self._find_fields.append(key[8:])
+            else:
+                self._find_fields = key[8:].split('_and_')
+            return self
+        elif key[:11] == 'findall_by_':
+            if key.find('_and_') == -1:
+                self._findall_fields.append(key[11:])
+            else:
+                self._findall_fields = key[11:].split('_and_')
+            return self
+        elif key[:11] == 'findall_in_':
+            self._findall_in_field = key[11:]
+            return self
+        elif key[:9] == 'count_by_':
+            if key.find('_and_') == -1:
+                self._count_by_fields.append(key[9:])
+            else:
+                self._count_by_fields = key[9:].split('_and_')
+            return self
         raise ThingException('key:{key} not found'.format(key = key))
+
+    def __call__(self, *args, **kwargs):
+        if self._find_fields:
+            for i, val in enumerate(self._find_fields):
+                self.where(val, '=', args[i])
+            return self.find()
+        if self._findall_fields:
+            for i, val in enumerate(self._findall_fields):
+                self.where(val, '=', args[i])
+            return self.findall(**kwargs)
+        if self._count_by_fields:
+            for i, val in enumerate(self._count_by_fields):
+                self.where(val, '=', args[i])
+            return self.count()
+        if self._findall_in_field:
+            self.where(self._findall_in_field, 'in', args[0])
+            return self.findall()
+        return self
 
     def __setattr__(self, key, val):
         if key[0] != '_' and key != 'errors':
@@ -238,7 +282,8 @@ class Thing(formencode.Schema):
             query = self.table.select().where(getattr(self.table.c, self._primary_key) == val)
         else:
             query = select([self.table], and_(*self._filters))
-        self._current_item = db.execute(query).first()
+        result = db.execute(query).first()
+        self._current_item = {} if not result else result
         # empty current filter
         self._filters = []
         return self
@@ -260,7 +305,7 @@ class Thing(formencode.Schema):
         for result in self._results:
             field_content.append(getattr(result, field))
         return field_content
-        
+
     def to_dict(self):
         d = {}
         for column_name in self.table.columns.keys():
