@@ -75,7 +75,8 @@ class Thing(formencode.Schema):
 
     def  __getattr__(self, key):
         if key in self._current_item:
-            return getattr(self._current_item, key)
+            value = getattr(self._current_item, key)
+            return '' if value is None else value
         elif key in self._unsaved_items:
             return self._unsaved_items[key]
         elif key[:8] == 'find_by_':
