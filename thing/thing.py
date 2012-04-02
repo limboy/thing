@@ -41,7 +41,7 @@ class Thing(formencode.Schema):
     errors = ThingError()
     allow_extra_fields = True
 
-    def __init__(self, engines):
+    def __init__(self, engines, **fields):
         """
         Args:
             engines (dict): {'master': master_engine, 'slave': slave_engine}
@@ -53,6 +53,8 @@ class Thing(formencode.Schema):
         self._default_engine = self._engines[self._engines.keys()[0]]
         self._default_db = self._dbs[self._dbs.keys()[0]]
         self._init_env()
+        for field_name, field_value in fields.items():
+            self._unsaved_items[field_name] = field_value
 
     def _init_env(self):
         self._current_item = {}
