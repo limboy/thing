@@ -307,6 +307,14 @@ class Thing(formencode.Schema):
         self._filters = []
         return self
 
+    def updateall(self, db_section = None, **fields):
+        db = self._default_db if not db_section else self._dbs[db_section]
+        update = self.table.update()
+        if self._filters:
+            for _filter in self._filters:
+                update = update.where(_filter)
+        return db.execute(update.values(**fields)).rowcount
+
     def get_field(self, field):
         field_content = []
         for result in self._results:
