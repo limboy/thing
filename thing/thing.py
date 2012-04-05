@@ -329,6 +329,12 @@ class Thing(formencode.Schema):
         for column_name in self.table.columns.keys():
             d[column_name] = getattr(self._current_item, column_name)
         return d
+        
+    def to_list(self):
+        results = []
+        for result in self._results:
+            results.append(result.to_dict())
+        return results
 
     def __repr__(self):
         if self._results:
