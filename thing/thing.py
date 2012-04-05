@@ -5,6 +5,10 @@ from sqlalchemy.sql import select, func, and_
 from functools import partial
 from blinker import signal
 
+class AttributeDict(dict):
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
+
 class ThingException(Exception):
     pass
 
@@ -328,7 +332,7 @@ class Thing(formencode.Schema):
         d = {}
         for column_name in self.table.columns.keys():
             d[column_name] = getattr(self._current_item, column_name)
-        return d
+        return AttributeDict(d)
         
     def to_list(self):
         results = []
