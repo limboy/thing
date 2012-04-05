@@ -272,6 +272,7 @@ class Thing(formencode.Schema):
         return self
 
     def select(self, fields):
+        self._selected_fields = []
         for field in fields:
             field_obj = None
             if field.find('(') != -1:
