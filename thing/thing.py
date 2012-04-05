@@ -294,6 +294,7 @@ class Thing(formencode.Schema):
         self._current_item = {} if not result else result
         # empty current filter
         self._filters = []
+        self._selected_tables = [self.table]
         return self
 
     def findall(self, limit = 20, offset = 0, db_section = None):
@@ -306,6 +307,7 @@ class Thing(formencode.Schema):
         self._results = db.execute(query).fetchall()
         # empty current filter
         self._filters = []
+        self._selected_tables = [self.table]
         return self
 
     def updateall(self, db_section = None, **fields):
