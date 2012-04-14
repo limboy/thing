@@ -3,7 +3,6 @@ import time
 import formencode
 from sqlalchemy import Table, MetaData, create_engine
 from sqlalchemy.sql import select, func, and_, compiler
-from MySQLdb.converters import conversions, escape
 from functools import partial
 from blinker import signal
 
