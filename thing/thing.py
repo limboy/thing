@@ -75,7 +75,7 @@ class Thing(formencode.Schema):
         if not Thing._db_conn.get(section):
             url = Thing._db_config[section]['url']
             kwargs = {k:v for k, v in Thing._db_config[section].items() if k != 'url'}
-            Thing._db_conn[section]= create_engine(url, **kwargs).connect()
+            Thing._db_conn[section]= create_engine(url, **kwargs).connect().execution_options(autocommit=True)
 
         if Thing._db_conn[section].closed:
             Thing._db_conn[section].connect()
