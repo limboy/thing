@@ -115,6 +115,12 @@ class Thing(formencode.Schema):
     @property
     def saved(self):
         return not bool(self._unsaved_items)
+        
+    def __delattr__(self, key):
+        if key in self._current_item:
+            del self._current_item[key]
+        elif key in self._unsaved_items:
+            del self._unsaved_items[key]
 
     def  __getattr__(self, key):
         if key in self._current_item:
