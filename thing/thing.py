@@ -115,7 +115,7 @@ class Thing(formencode.Schema):
     @property
     def saved(self):
         return not bool(self._unsaved_items)
-        
+
     def __delattr__(self, key):
         if key in self._current_item:
             del self._current_item[key]
@@ -297,8 +297,8 @@ class Thing(formencode.Schema):
         self._before_delete()
         if self._primary_key in self._current_item.keys():
             pk = self._primary_key
-            query = self.table.delete().where(getattr(self.table.c, pk), self._current_item[pk])
-            rowcount = db.execute().rowcount
+            query = self.table.delete().where(getattr(self.table.c, pk) == self._current_item[pk])
+            rowcount = db.execute(query).rowcount
         else:
             query = self.table.delete(and_(*self._filters))
             rowcount = db.execute(query).rowcount
