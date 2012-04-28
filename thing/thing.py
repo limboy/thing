@@ -116,6 +116,14 @@ class Thing(formencode.Schema):
     def saved(self):
         return not bool(self._unsaved_items)
 
+    def query(self, query_str):
+        """
+        execute raw sql
+        """
+        classname = self.__class__.__name__.lower()
+        db = Thing._get_conn(classname, True, self.sharding_strategy())
+        return db.execute(query_str)
+
     def __delattr__(self, key):
         if key in self._current_item:
             del self._current_item[key]
