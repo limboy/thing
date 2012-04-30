@@ -131,11 +131,11 @@ class Thing(formencode.Schema):
             del self._unsaved_items[key]
 
     def  __getattr__(self, key):
-        if key in self._current_item:
+        if key in self._unsaved_items:
+            return self._unsaved_items[key]
+        elif key in self._current_item:
             value = getattr(self._current_item, key)
             return '' if value is None else value
-        elif key in self._unsaved_items:
-            return self._unsaved_items[key]
         elif key[:8] == 'find_by_':
             if key.find('_and_') == -1:
                 self._find_fields.append(key[8:])
