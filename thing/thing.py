@@ -3,6 +3,7 @@ import time
 import formencode
 from sqlalchemy import Table, MetaData, create_engine
 from sqlalchemy.sql import select, func, and_, compiler
+from sqlalchemy.sql.expression import label
 from functools import partial
 from blinker import signal
 
@@ -123,6 +124,11 @@ class Thing(formencode.Schema):
         classname = self.__class__.__name__.lower()
         db = Thing._get_conn(classname, True, self.sharding_strategy())
         return db.execute(query_str)
+
+    def add_error(self, **error_dict):
+        errors = self.errors
+        errors.update(error_dict)
+        self.errors = errors
 
     def __delattr__(self, key):
         if key in self._current_item:
@@ -344,7 +350,7 @@ class Thing(formencode.Schema):
         field_obj = None
         if field.find('(') != -1:
             sql_func = getattr(func, field[:field.find('(')])
-            field = field[field.find('(')+1, -1]
+            field = field[field.find('(')+1: -1]
             field_obj = sql_func(getattr(self.table.c, field))
         else:
             field_obj = getattr(self.table.c, field)
@@ -383,8 +389,13 @@ class Thing(formencode.Schema):
             field_obj = None
             if field.find('(') != -1:
                 sql_func = getattr(func, field[:field.find('(')])
-                field = field[field.find('(')+1, -1]
-                field_obj = sql_func(getattr(self.table.c, field))
+                if field.find(' as ') == -1:
+                    field = field[field.find('(')+1: -1]
+                    field_obj = sql_func(getattr(self.table.c, field))
+                else:
+                    field, as_label = field.split(' as ')
+                    field = field[field.find('(')+1: -1]
+                    field_obj = sql_func(getattr(self.table.c, field)).label(as_label)
             else:
                 field_obj = getattr(self.table.c, field)
             self._selected_fields.append(field_obj)
@@ -394,14 +405,13 @@ class Thing(formencode.Schema):
         classname = self.__class__.__name__.lower()
         db = Thing._get_conn(classname, True, self.sharding_strategy())
         if val:
+            result = self._before_find(val)
+            if result:
+                self._current_item = result
+                return self
             query = self.table.select().where(getattr(self.table.c, self._primary_key) == val)
         else:
-            query = select([self.table], and_(*self._filters))
-
-        result = self._before_find(val)
-        if result:
-            self._current_item = result
-            return self
+            query = select(self._selected_fields, and_(*self._filters))
 
         if self._profile:
             start_time = time.time()
