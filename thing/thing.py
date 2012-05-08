@@ -257,7 +257,7 @@ class Thing(formencode.Schema):
             return 1
         return 0
 
-    def _before_insert(self, val):
+    def _before_insert(self):
         pass
 
     def _before_update(self):
@@ -275,7 +275,7 @@ class Thing(formencode.Schema):
     def _after_delete(self):
         pass
 
-    def _before_find(self):
+    def _before_find(self, val):
         pass
 
     def _before_findall(self):
