@@ -3,12 +3,12 @@ import os
 
 setup(
     name = 'thing',
-    version = '0.1',
+    version = '0.2',
     url = 'http://github.com/lzyy/thing',
     license = 'BSD',
     author = 'lzyy',
     author_email = 'healdream@gmail.com',
-    description = 'a tiny active record orm based on sqlalchemy',
+    description = 'lightweight SQLAlchemy based ORM',
     long_description = open('./README.md').read(),
     zip_safe = False,
     platforms = 'any',
@@ -21,7 +21,7 @@ setup(
         'mysql-python',
     ],
     classifiers = [
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Operating System :: OS Independent',

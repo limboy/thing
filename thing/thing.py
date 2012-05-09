@@ -2,7 +2,7 @@
 __title__ = 'thing'
 __version__ = '0.2.0'
 __author__ = 'lzyy'
-__license__ = 'MIT'
+__license__ = 'BSD'
 
 import logging
 import time
