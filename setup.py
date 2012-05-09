@@ -9,7 +9,7 @@ setup(
     author = 'lzyy',
     author_email = 'healdream@gmail.com',
     description = 'lightweight SQLAlchemy based ORM',
-    long_description = 'doc <http://blog.leezhong.com/thing/>',
+    long_description = 'doc: http://blog.leezhong.com/thing/',
     zip_safe = False,
     platforms = 'any',
     packages = ["thing"],
