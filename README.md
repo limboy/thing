@@ -31,7 +31,7 @@ I like ORM, it's the way programmers deal with database. I like ROR's active rec
 
 # Installation
 
-`pip install -e 'git+git://github.com/lzyy/thing.git#egg=Thing'`
+`pip install thing`
 
 # Basic Usage
 
