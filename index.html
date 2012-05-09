@@ -1,0 +1,358 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Thing by lzyy</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>Thing</h1>
+        <p>lightweight SQLAlchemy based ORM</p>
+        <p class="view"><a href="https://github.com/lzyy/thing">View the Project on GitHub <small>lzyy/thing</small></a></p>
+        <ul>
+          <li><a href="https://github.com/lzyy/thing/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/lzyy/thing/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/lzyy/thing">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h1>What is Thing</h1>
+
+<p>Thing is a lightweight SQLAlchemy based ORM, powerful meanwhile flexible.</p>
+
+<h1>Why Thing</h1>
+
+<p>I like ORM, it's the way programmers deal with database. I like ROR's active record, though not all all them. I want it can be easily configured to master / slave, sharding mode, has validator, easy to be integrated with cache. SO I create Thing.</p>
+
+<h1>Thing's Feature</h1>
+
+<ul>
+<li>master / slave mode can be easily configured, even sharding strategy can be easily implemented. </li>
+<li>has hook before / after CRUD, so you can easily implement cache strategy.</li>
+<li>blinker's signal is triggered before CUD, make your application more loose couple.</li>
+<li>integrated an validator (via formencode)</li>
+<li>support profile</li>
+<li>support ROR's dynamic query, like find_by_user_id, count_by_status</li>
+</ul><h1>Installation</h1>
+
+<pre><code>pip install thing
+</code></pre>
+
+<h1>Basic Usage</h1>
+
+<p>suppose we have an user table like this:</p>
+
+<pre><code>CREATE TABLE `user` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) DEFAULT NULL,
+  `password` varchar(40) DEFAULT NULL,
+  UNIQUE KEY `username` (`username`)
+) ENGINE=InnoDB CHARSET=utf8
+</code></pre>
+
+<h2>define user model</h2>
+
+<pre><code>#user.py
+import thing
+class User(thing.Thing):
+     pass
+
+
+#conn.py
+import thing
+
+db_config = {
+        'master': {
+            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+            'echo': False,
+            },
+        'slave': {
+            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+            'echo': False,
+            },
+    }
+
+thing.Thing.db_config(db_config)
+
+
+#main.py
+import user
+import conn
+
+# create user
+user_id = user.User(
+    usernmae = 'foobar',
+    password = 'p@ssword',
+).save()
+
+# find user
+current_user = user.User().find(user_id)
+print current_user.username # 'foobar'
+
+# update user
+current_user.username = 'test'
+current_user.save()
+print current_user.name # 'test'
+
+# delete user
+user.User().find(user_id).delete()
+</code></pre>
+
+<h1>Advanced Usage</h1>
+
+<h2>query</h2>
+
+<pre><code>import user
+import conn
+
+some_users = user.User().where('id', '&lt;', 10).findall()
+print len(some_users) # 9
+for some_user in some_users:
+    print some_user.username
+
+some_users = user.User().select(['id']).where('id', '&lt;', 10).order_by('-id').findall(limit=5, offset=5)
+
+user_ids = user.User().findall(limit=5).get_field('id') # [1, 2, 3, 4, 5]
+
+max_user_id = user.User().select(['max(id) as max_id']).find().max_id
+</code></pre>
+
+<h2>update</h2>
+
+<pre><code>import user
+import conn
+
+user.User().where('id', '&lt;', 10).updateall(username = 'foobar') # return 9 (affected rows)
+</code></pre>
+
+<h2>delete</h2>
+
+<pre><code>import user
+import conn
+
+user.User().where('id', '&lt;', 5).delete() # return 4 (affected rows)
+</code></pre>
+
+<h2>raw sql</h2>
+
+<pre><code>import user
+import conn
+
+user.User().query('do some special query')
+</code></pre>
+
+<h1>Dynamic Method</h1>
+
+<p>there are 4 kind of dynamic method: <code>find_by_{fields}</code>, <code>findall_by_{fields}</code>, <code>findall_in_{field}</code>, <code>count_by_{fields}</code></p>
+
+<p>i.e.</p>
+
+<pre><code>import conn
+import user
+
+user.User().findall_in_id([1, 3, 5]) # find users whose id is 1, 3, 5
+
+user.User().find_by_id_and_username(3, 'foobar') # find user whose id is 3 and username is foobar
+
+user.User().count_by_id_and_username(4, 'john') # how many rows meets the condition: id = 4 and username = 'john'
+</code></pre>
+
+<p>borrowed from ROR, if you want to add cache, just implement the method you called, that's it, totally transparent.</p>
+
+<h1>Hooks</h1>
+
+<p>there are currently 8 hooks:</p>
+
+<ul>
+<li>_before_insert</li>
+<li>_after_insert</li>
+<li>_before_update</li>
+<li>_after_update</li>
+<li>_before_delete</li>
+<li>_after_delete</li>
+<li>_before_find</li>
+<li>_before_findall</li>
+</ul><p>if we want to add cache for the find method in User model, just implement some hooks</p>
+
+<pre><code>#user.py
+import thing
+import redis
+import json
+
+rc = redis.Redis()
+
+class User(thing.Thing):
+    def _before_insert(self):
+        rc.set('user:{0}'.format(self.id), json.dumps(self.to_dict()))
+
+    def _before_update(self):
+        self._before_insert()
+
+    def _before_read(self):
+        user = rc.get('user:{0}')
+        if user:
+            return json.loads(user)
+</code></pre>
+
+<h1>Signal</h1>
+
+<p>suppose there are article and comment tables, article table has an field <code>comment_count</code>, so when a new comment added, article table should update its <code>comment_count</code> field. it can be done via signal.</p>
+
+<p>there are 8 built in signals</p>
+
+<ul>
+<li>model.before_validation</li>
+<li>model.after_validation</li>
+<li>model.before_insert</li>
+<li>model.after_insert</li>
+<li>model.before_update</li>
+<li>model.after_update</li>
+<li>model.before_delete</li>
+<li>model.after_delete</li>
+</ul><pre><code>#article.py
+from blinker import signal
+import thing
+
+comment_add = signal('comment.after_insert')
+
+class Article(thing.Thing):
+    @comment_add.connect
+    def _comment_add(comment):
+        article = Article().find(comment.article_id)
+        article.comment_count += 1
+        article.save()
+
+#comment.py
+import thing
+
+class Comment(thing.Thing):
+    pass
+
+#trigger.py
+import conn
+import article, comment
+
+comment.Comment(content = 'hello world').save()
+# that's it, article's `comment_count` field will be updated.
+</code></pre>
+
+<h1>validator</h1>
+
+<p>validate is implemented via <a href="http://www.formencode.org/en/latest/Validator.html">formencode</a></p>
+
+<p>if we want to add some restrict to our User model's username field, it can be done like this:</p>
+
+<pre><code>import thing
+class User(thing.Thing):
+    username = formencode.All(
+            validators.String(
+                 not_empty = True,
+                 strip = True,
+                 min = 4,
+                 max = 24,
+                 messages = {
+                     'empty': u'please enter an username',
+                     'tooLong': u'username too long',
+                     'tooShort': u'username too short'}),
+             validators.PlainText(messages = {
+                     'invalid': u'username can only contain "number", "_", "-" and "digit"'
+                  }))
+
+# if we want to save with invalid username, it can not be saved
+
+user = User()
+user.username = '!@#$%^&amp;'
+user.save()
+print user.saved # False
+print user.errors # a dict contains error field and message
+</code></pre>
+
+<p>with the help of formencode, the validator can be very flexible.</p>
+
+<h1>Profile</h1>
+
+<p>sqlalchemy will print sql execution information if debug is set to True, but it is unreadable and not so detail.</p>
+
+<pre><code>import thing
+import user
+
+thing.Thing.enable_profile()
+user.User().findall()
+# any other db related operation
+print thing.Thing.get_sql_stats # a dict with total_time, query_count, and executed query
+</code></pre>
+
+<h1>Partition</h1>
+
+<p>Thing support master / slave natively. if you have do some vertical partition, and the partition has its own master / slave, it's OK. if you have domain related sharding strategy, just implement <code>sharding_strategy</code> method.</p>
+
+<p>take this db_config as an example.</p>
+
+<pre><code>db_config = {
+        'master': {
+            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+            'echo': False,
+            },
+        'slave': {
+            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+            'echo': False,
+            },
+        'user.master': {
+            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+            'echo': False,
+            },
+        'user.slave': {
+            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+            'echo': False,
+            },
+        'article.sharding1': {
+            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+            'echo': False,
+            },
+        'article.sharding2': {
+            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+            'echo': False,
+            },
+    }
+</code></pre>
+
+<p>article model's implementation</p>
+
+<pre><code>import thing
+
+class Article(thing.Thing):
+    def sharding_strategy(self):
+        if self.id % 2 == 0:
+            return 'sharding1'
+        else:
+            return 'sharding2'
+</code></pre>
+
+<ul>
+<li>user model's db write operation will go to <code>user.master</code> section, read go to <code>user.slave</code>
+</li>
+<li>article model's id is even, go to sharding1 else go to sharding2</li>
+<li>comment model's db write operation will go to <code>master</code> section, read go to <code>slave</code>
+</li>
+</ul>
+      </section>
+    </div>
+    <footer>
+      <p>Project maintained by <a href="https://github.com/lzyy">lzyy</a></p>
+      <p>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></p>
+    </footer>
+    <!--[if !IE]><script>fixScale(document);</script><!--<![endif]-->
+    
+  </body>
+</html>
