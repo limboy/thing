@@ -1,6 +1,6 @@
 #coding=utf-8
 __title__ = 'thing'
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 __author__ = 'lzyy'
 __license__ = 'BSD'
 
@@ -290,7 +290,7 @@ class Thing(formencode.Schema):
         Thing._sql_stats = {'total_time':0, 'query_count':0, 'detail':[]}
 
     def save(self, validate = True):
-        db = Thing._get_conn(this._tablename, False, self.sharding_strategy())
+        db = Thing._get_conn(self._tablename, False, self.sharding_strategy())
 
         # fill the _unsaved_items with _current_item if not empty
         if self._current_item:

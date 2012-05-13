@@ -3,7 +3,7 @@ import os
 
 setup(
     name = 'thing',
-    version = '0.2',
+    version = '0.2.1',
     url = 'http://github.com/lzyy/thing',
     license = 'BSD',
     author = 'lzyy',
