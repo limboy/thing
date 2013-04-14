@@ -1,12 +1,13 @@
 from setuptools import setup
 import os
+import thing.thing as thing
 
 setup(
-    name = 'thing',
-    version = '0.3.0',
+    name = thing.__name__,
+    version = thing.__version__,
     url = 'http://github.com/lzyy/thing',
-    license = 'BSD',
-    author = 'lzyy',
+    license = thing.__license__,
+    author = thing.__author__,
     author_email = 'healdream@gmail.com',
     description = 'lightweight SQLAlchemy based ORM',
     long_description = 'doc: http://blog.leezhong.com/thing/',
