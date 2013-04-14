@@ -1,17 +1,16 @@
 #coding=utf-8
-__title__ = 'thing'
-__version__ = '0.2.1'
+__name__ = 'thing'
+__version__ = '0.3.0'
 __author__ = 'lzyy'
 __license__ = 'BSD'
 
 import logging
+import sys
 import time
-import formencode
 from sqlalchemy import Table, MetaData, create_engine
 from sqlalchemy.sql import select, func, and_, compiler
 from sqlalchemy.sql.expression import label
 from functools import partial
-from blinker import signal
 
 class AttributeDict(dict):
     __getattr__ = dict.__getitem__
@@ -20,28 +19,7 @@ class AttributeDict(dict):
 class ThingException(Exception):
     pass
 
-class ThingError(object):
-    """
-    a descriptor for Thing's errors
-    """
-
-    def __init__(self):
-        self._errors = {}
-
-    def __get__(self, instance, type = None):
-        errors = {}
-        for key, val in self._errors.items():
-            errors[key] = val.msg
-        return errors
-
-    def __set__(self, instance, error):
-        self._errors = {}
-        for key, val in error.items():
-            if isinstance(val, basestring):
-                val = formencode.api.Invalid(val, value = None, state = None)
-            self._errors[key] = val
-
-class Thing(formencode.Schema):
+class Thing(object):
 
     # change this if your pk is not id
     # current doesn't support multi pk
@@ -50,30 +28,16 @@ class Thing(formencode.Schema):
     # if leave it as None, lower classname will be used
     _tablename = None
 
-    # collect sql execution
-    _sql_stats = {'total_time':0, 'query_count':0, 'detail':[]}
-
-    # indicate if profile is enabled
-    _profile = False
-
-    # like find_by_user_id / findall_by_status
-    _dynamic_query = None 
-
     # record tables schema infomation
     _table_schemas = {} 
 
-    # descriptor
-    errors = ThingError()
+    # _has_many = {'posts': {'model': post.Post(), 'foreign_key': 'user_id'}}
+    # then u can use like this: current_user.posts.findall()
+    _has_many = {}
 
-    # used for formencode.Schema
-    allow_extra_fields = True
-
-    def compile_query(self, query):
-        """
-        used when profiling
-        """
-        #TODO add query data, not only sql placeholder
-        return str(query)
+    # _belongs_to = {'post': {'model': post.Post(), 'foreign_key': 'post_id'}}
+    # then u can use like this: comment.post.title
+    _belongs_to = {}
 
     @staticmethod
     def db_config(db_config):
@@ -97,10 +61,6 @@ class Thing(formencode.Schema):
         Thing._db_conn = {}
 
     @staticmethod
-    def enable_profile():
-        Thing._profile = True
-
-    @staticmethod
     def _get_conn(table_name, is_read, sharding = None):
         """
         if this is read operation and table_name.slave exists in db_config, then this section is used
@@ -109,7 +69,10 @@ class Thing(formencode.Schema):
         if this is write operation and table_name.master exists in db_config, then this section is used
         else master section will be used
         """
-        section = '%s.%s%s'%(table_name, 'slave' if is_read else 'write', '.'+sharding if sharding else '')
+        if sharding:
+            section = '%s.%s' % (table_name, sharding)
+        else:
+            section = '%s.%s' % (table_name, 'slave' if is_read else 'master')
         if not section in Thing._db_config:
             # make sure there is 'slave' and 'master' section in db_config
             section = 'slave' if is_read else 'master'
@@ -147,7 +110,6 @@ class Thing(formencode.Schema):
         self._filters = []
         self._results = []
         self._current_index = -1
-        self.errors = {}
         self._find_fields = []
         self._findall_fields = []
         self._count_by_fields = []
@@ -160,20 +122,12 @@ class Thing(formencode.Schema):
     def saved(self):
         return not bool(self._unsaved_items)
 
-    def query(self, query_str):
+    def execute(self, query_str):
         """
         execute raw sql
         """
         db = Thing._get_conn(self._tablename, True, self.sharding_strategy())
         return db.execute(query_str)
-
-    def add_error(self, **error_dict):
-        """
-        manually add an error
-        """
-        errors = self.errors
-        errors.update(error_dict)
-        self.errors = errors
 
     def __delattr__(self, key):
         if key in self._current_item:
@@ -182,6 +136,14 @@ class Thing(formencode.Schema):
             del self._unsaved_items[key]
 
     def  __getattr__(self, key):
+
+        def _import(name):
+            mod = __import__(name)
+            components = name.split('.')
+            for comp in components[1:]:
+                mod = getattr(mod, comp)
+            return mod
+
         if key in self._unsaved_items:
             return self._unsaved_items[key]
         elif key in self._current_item:
@@ -192,26 +154,43 @@ class Thing(formencode.Schema):
                 self._find_fields.append(key[8:])
             else:
                 self._find_fields = key[8:].split('_and_')
-            Thing._dynamic_query = key
             return self
         elif key[:11] == 'findall_by_':
             if key.find('_and_') == -1:
                 self._findall_fields.append(key[11:])
             else:
                 self._findall_fields = key[11:].split('_and_')
-            Thing._dynamic_query = key
             return self
         elif key[:11] == 'findall_in_':
             self._findall_in_field = key[11:]
-            Thing._dynamic_query = key
             return self
         elif key[:9] == 'count_by_':
             if key.find('_and_') == -1:
                 self._count_by_fields.append(key[9:])
             else:
                 self._count_by_fields = key[9:].split('_and_')
-            Thing._dynamic_query = key
             return self
+        elif key in self._has_many:
+            model_name = self._has_many[key]['model']
+            if model_name.find('.') != -1:
+                sections = model_name.split('.')
+                # __import__ only import first section
+                model = getattr(_import('.'.join(sections[:-1])), sections[-1])()
+            else:
+                model = locals()[model_name]()
+            model.where(self._has_many[key]['foreign_key'], '=', getattr(self, self._primary_key))
+            return model
+        elif key in self._belongs_to:
+            model_name = self._has_many[key]['model']
+            if model_name.find('.') != -1:
+                sections = model_name.split('.')
+                __import__('.'.join(sections[:-1]))
+                model = getattr(sys.modules['.'.join(sections[:-1])], sections[-1])()
+            else:
+                model = locals()[model_name]()
+            model.find(getattr(self, self._has_many[key]['foreign_key']))
+            return model
+
         raise ThingException('key:{key} not found'.format(key = key))
 
     def __call__(self, *args, **kwargs):
@@ -220,32 +199,28 @@ class Thing(formencode.Schema):
                 self.where(val, '=', args[i])
             self._find_fields = []
             result = self.find()
-            Thing._dynamic_query = None
             return result
         if self._findall_fields:
             for i, val in enumerate(self._findall_fields):
                 self.where(val, '=', args[i])
             self._findall_fields = []
             result = self.findall(**kwargs)
-            Thing._dynamic_query = None
             return result
         if self._count_by_fields:
             for i, val in enumerate(self._count_by_fields):
                 self.where(val, '=', args[i])
             self._count_by_fields = []
             result = self.count()
-            Thing._dynamic_query = None
             return result
         if self._findall_in_field:
             self.where(self._findall_in_field, 'in', args[0])
             self._findall_in_field = None
             result = self.findall()
-            Thing._dynamic_query = None
             return result
         return self
 
     def __setattr__(self, key, val):
-        if key[0] != '_' and key != 'errors':
+        if key[0] != '_':
             self._unsaved_items[key] = val
         else:
             object.__setattr__(self, key, val)
@@ -281,15 +256,7 @@ class Thing(formencode.Schema):
     def _before_findall(self):
         pass
 
-    @staticmethod
-    def get_sql_stats():
-        return Thing._sql_stats
-
-    @staticmethod
-    def clear_sql_stats():
-        Thing._sql_stats = {'total_time':0, 'query_count':0, 'detail':[]}
-
-    def save(self, validate = True):
+    def save(self):
         db = Thing._get_conn(self._tablename, False, self.sharding_strategy())
 
         # fill the _unsaved_items with _current_item if not empty
@@ -300,24 +267,7 @@ class Thing(formencode.Schema):
 
         classname = self.__class__.__name__.lower()
 
-        if validate:
-            # before validation
-            signal('{0}.before_validation'.format(classname)).send(self)
-            if self.errors:
-                return self
-
-            # validation
-            if not self.validate():
-                return self
-
-            # after validation
-            signal('{0}.after_validation'.format(classname)).send(self)
-            if self.errors:
-                return self
-
         if self._primary_key in self._unsaved_items.keys():
-            # before update
-            signal('{0}.before_update'.format(classname)).send(self)
 
             primary_key_val = self._unsaved_items.pop(self._primary_key)
             query = (self.table.update()
@@ -329,12 +279,7 @@ class Thing(formencode.Schema):
             query = self.table.select().where(getattr(self.table.c, self._primary_key) == primary_key_val)
             self._current_item = db.execute(query).first()
             self._after_update()
-            # after update
-            signal('{0}.after_update'.format(classname)).send(self)
         else:
-            # before insert
-            signal('{0}.before_insert'.format(classname)).send(self)
-
             self._before_insert()
             query = self.table.insert().values(**self._unsaved_items)
             primary_key_val = db.execute(query).inserted_primary_key[0]
@@ -342,8 +287,6 @@ class Thing(formencode.Schema):
             query = self.table.select().where(getattr(self.table.c, self._primary_key) == primary_key_val)
             self._current_item = db.execute(query).first()
             self._after_insert()
-            # after insert
-            signal('{0}.after_insert'.format(classname)).send(self)
 
         self._unsaved_items = {}
         return primary_key_val
@@ -353,7 +296,6 @@ class Thing(formencode.Schema):
         classname = self.__class__.__name__.lower()
 
         self._before_delete()
-        signal('{0}.before_delete'.format(classname)).send(self)
 
         if self._primary_key in self._current_item.keys():
             pk = self._primary_key
@@ -364,7 +306,6 @@ class Thing(formencode.Schema):
             rowcount = db.execute(query).rowcount
 
         self._after_delete()
-        signal('{0}.after_delete'.format(classname)).send(self)
 
         return rowcount
 
@@ -377,23 +318,6 @@ class Thing(formencode.Schema):
             conn = Thing._get_conn(self._tablename, True, self.sharding_strategy())
             Thing._table_schemas[self._tablename] = Table(self._tablename, MetaData(), autoload = True, autoload_with = conn)
         return Thing._table_schemas[self._tablename]
-
-    def validate(self, fields = None):
-        current_fields = self.__class__.fields
-        saved_fields = {}
-        if fields:
-            for key, val in current_fields.items():
-                if key not in fields:
-                    saved_fields[key] = current_fields.pop(key)
-        try:
-            self.to_python(self._unsaved_items)
-        except formencode.Invalid, e:
-            self.errors = e.error_dict
-        for key, val in saved_fields.items():
-            current_fields[key] = val
-        if self.errors:
-            return False
-        return True
 
     def where(self, field, operation, val):
         # check if field has function in it
@@ -461,14 +385,7 @@ class Thing(formencode.Schema):
         else:
             query = select(self._selected_fields, and_(*self._filters))
 
-        if self._profile:
-            start_time = time.time()
         result = db.execute(query).first()
-        if self._profile:
-            passed_time = '%.4f' % (time.time() - start_time)
-            Thing._sql_stats['total_time'] += float(passed_time)
-            Thing._sql_stats['query_count'] += 1
-            Thing._sql_stats['detail'].append([self.compile_query(query), passed_time, Thing._dynamic_query])
 
         self._current_item = {} if not result else result
         # empty current filter
@@ -489,14 +406,7 @@ class Thing(formencode.Schema):
             self._results = result
             return self
 
-        if self._profile:
-            start_time = time.time()
         self._results = db.execute(query).fetchall()
-        if self._profile:
-            passed_time = '%.4f' % (time.time() - start_time)
-            Thing._sql_stats['total_time'] += float(passed_time)
-            Thing._sql_stats['query_count'] += 1
-            Thing._sql_stats['detail'].append([self.compile_query(query), passed_time, Thing._dynamic_query])
 
         # empty current filter
         self._filters = []
@@ -510,14 +420,7 @@ class Thing(formencode.Schema):
             for _filter in self._filters:
                 update = update.where(_filter)
         query = update.values(**fields)
-        if self._profile:
-            start_time = time.time()
         rowcount = db.execute().rowcount
-        if self._profile:
-            passed_time = '%.4f' % (time.time() - start_time)
-            Thing._sql_stats['total_time'] += float(passed_time)
-            Thing._sql_stats['query_count'] += 1
-            Thing._sql_stats['detail'].append([self.compile_query(query), passed_time])
         return rowcount
 
     def get_field(self, field):
@@ -561,15 +464,7 @@ class Thing(formencode.Schema):
         """
         db = Thing._get_conn(self._tablename, True, self.sharding_strategy())
         query = select([func.count(getattr(self.table.c, self._primary_key))], and_(*self._filters))
-
-        if self._profile:
-            start_time = time.time()
         result = db.execute(query).scalar()
-        if self._profile:
-            passed_time = '%.4f' % (time.time() - start_time)
-            Thing._sql_stats['total_time'] += float(passed_time)
-            Thing._sql_stats['query_count'] += 1
-            Thing._sql_stats['detail'].append([self.compile_query(query), passed_time, Thing._dynamic_query])
         return result
 
     def reset(self):

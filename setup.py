@@ -3,7 +3,7 @@ import os
 
 setup(
     name = 'thing',
-    version = '0.2.1',
+    version = '0.3.0',
     url = 'http://github.com/lzyy/thing',
     license = 'BSD',
     author = 'lzyy',
@@ -16,8 +16,6 @@ setup(
     include_package_data = True,
     install_requires = [
         'sqlalchemy',
-        'blinker',
-        'formencode',
         'mysql-python',
     ],
     classifiers = [
