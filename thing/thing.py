@@ -1,16 +1,14 @@
 #coding=utf-8
-__name__ = 'thing'
-__version__ = '0.3.0'
-__author__ = 'lzyy'
-__license__ = 'BSD'
-
-import logging
-import sys
 import time
+import logging
+import json
+import sys
+import redis
 from sqlalchemy import Table, MetaData, create_engine
 from sqlalchemy.sql import select, func, and_, compiler
 from sqlalchemy.sql.expression import label
 from functools import partial
+from MySQLdb.converters import conversions, escape
 
 class AttributeDict(dict):
     __getattr__ = dict.__getitem__
@@ -39,49 +37,83 @@ class Thing(object):
     # then u can use like this: comment.post.title
     _belongs_to = {}
 
-    @staticmethod
-    def db_config(db_config):
-        """
-        db_config is like this:
+    # when a list of rows are ready to be delete, put it here
+    # so cache can clear these records
+    __tobe_deleted_rows = []
 
-        db_config = {
-            'master': {
-                'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-                'echo': False,
+    __tobe_updated_rows = []
+
+    __logger = None
+
+    @staticmethod
+    def config(config):
+        """
+        config is like this:
+
+        config = {
+            'db': {
+                'master': {
+                    'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+                    'echo': False,
+                    },
+                'slave': {
+                    'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
+                    'echo': False,
                 },
-            'slave': {
-                'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-                'echo': False,
-                },
+            }, 
+            'redis': {
+                'host': 'localhost',
+                'port': 6379,
+                'db': 0,
+            }
+            'thing':
+                'debug': True,
         }
 
-        there must have at least master and slave section in db_config
+        there must have at least master and slave section in db section
         """
-        Thing._db_config = db_config
+        Thing._config = config
         Thing._db_conn = {}
+        Thing._redis_conn = redis.StrictRedis(host=config['redis']['host'], port=config['redis']['port'], db=config['redis']['db'])
+
+    def debug(self, message):
+        if Thing._config['thing'].get('debug'):
+            if not Thing.__logger:
+                Thing.__logger = logging.getLogger(__name__)
+                Thing.__logger.setLevel(logging.DEBUG)
+                formatter = logging.Formatter('DEBUG - %(message)s')
+                handler_stream = logging.StreamHandler(sys.stdout)
+                handler_stream.setFormatter(formatter)
+                handler_stream.setLevel(logging.DEBUG)
+                Thing.__logger.addHandler(handler_stream)
+            Thing.__logger.debug(message)
+
+    def compile_query(self, query):
+        # TODO format query with values
+        return query
 
     @staticmethod
     def _get_conn(table_name, is_read, sharding = None):
         """
-        if this is read operation and table_name.slave exists in db_config, then this section is used
+        if this is read operation and table_name.slave exists in config['db'], then this section is used
         else slave section will be used
 
-        if this is write operation and table_name.master exists in db_config, then this section is used
+        if this is write operation and table_name.master exists in config['db'], then this section is used
         else master section will be used
         """
         if sharding:
             section = '%s.%s' % (table_name, sharding)
         else:
             section = '%s.%s' % (table_name, 'slave' if is_read else 'master')
-        if not section in Thing._db_config:
-            # make sure there is 'slave' and 'master' section in db_config
+        if not section in Thing._config['db']:
+            # make sure there is 'slave' and 'master' section in config['db']
             section = 'slave' if is_read else 'master'
 
         # do not connect multi times
         conn = Thing._db_conn.setdefault(section, None)
         if not Thing._db_conn.get(section):
-            url = Thing._db_config[section]['url']
-            kwargs = {k:v for k, v in Thing._db_config[section].items() if k != 'url'}
+            url = Thing._config['db'][section]['url']
+            kwargs = {k:v for k, v in Thing._config['db'][section].items() if k != 'url'}
             Thing._db_conn[section]= create_engine(url, **kwargs).connect().execution_options(autocommit=True)
 
         if Thing._db_conn[section].closed:
@@ -91,7 +123,7 @@ class Thing(object):
     def sharding_strategy(self):
         """
         override this method to implenment your sharding strategy
-        if there is `user.master.sharding1` in db_config, and you
+        if there is `user.master.sharding1` in config['db'], and you
         want to use it, return sharding1
         """
         pass
@@ -101,6 +133,7 @@ class Thing(object):
         set fields' init value is allowed
         """
         self._init_env()
+
         for field_name, field_value in fields.items():
             self._unsaved_items[field_name] = field_value
 
@@ -122,11 +155,11 @@ class Thing(object):
     def saved(self):
         return not bool(self._unsaved_items)
 
-    def execute(self, query_str):
+    def execute(self, query_str, is_read = True):
         """
         execute raw sql
         """
-        db = Thing._get_conn(self._tablename, True, self.sharding_strategy())
+        db = Thing._get_conn(self._tablename, is_read, self.sharding_strategy())
         return db.execute(query_str)
 
     def __delattr__(self, key):
@@ -181,14 +214,14 @@ class Thing(object):
             model.where(self._has_many[key]['foreign_key'], '=', getattr(self, self._primary_key))
             return model
         elif key in self._belongs_to:
-            model_name = self._has_many[key]['model']
+            model_name = self._belongs_to[key]['model']
             if model_name.find('.') != -1:
                 sections = model_name.split('.')
                 __import__('.'.join(sections[:-1]))
                 model = getattr(sys.modules['.'.join(sections[:-1])], sections[-1])()
             else:
                 model = locals()[model_name]()
-            model.find(getattr(self, self._has_many[key]['foreign_key']))
+            model.find(getattr(self, self._belongs_to[key]['foreign_key']))
             return model
 
         raise ThingException('key:{key} not found'.format(key = key))
@@ -239,19 +272,45 @@ class Thing(object):
         pass
 
     def _after_insert(self):
-        pass
+        Thing._redis_conn.set('thing.%s:%s' % (self.__class__.__name__, self._current_item[self._primary_key]),
+                json.dumps(self.to_dict()))
 
     def _after_update(self):
-        pass
+        if self.__tobe_updated_rows:
+            for row in self.__tobe_updated_rows:
+                Thing._redis_conn.delete('thing.%s:%s' % (self.__class__.__name__, row[self._primary_key]))
+        elif self._current_item:
+            self._after_insert()
 
     def _before_delete(self):
-        pass
+        if self._primary_key in self._current_item.keys():
+            Thing._redis_conn.delete('thing.%s:%s' % (self.__class__.__name__, self._current_item[self._primary_key]))
+        elif self.__tobe_deleted_rows:
+            for row in self.__tobe_deleted_rows:
+                Thing._redis_conn.delete('thing.%s:%s' % (self.__class__.__name__, row[self._primary_key]))
 
     def _after_delete(self):
         pass
 
     def _before_find(self, val):
-        pass
+        key_name = 'thing.%s:%s' % (self.__class__.__name__, val)
+        result = Thing._redis_conn.get(key_name)
+        if result:
+            result = json.loads(result)
+            self.debug('Cache Read: %s' % key_name)
+        return result
+
+    def _after_find(self, val):
+        if not val:
+            if not self._current_item:
+                return
+            else:
+                val = getattr(self,_current_item, self._primary_key)
+
+        key_name = 'thing.%s:%s' % (self.__class__.__name__, val)
+        result = Thing._redis_conn.get(key_name)
+        if not result:
+            Thing._redis_conn.set(key_name, json.dumps(self.to_dict()))
 
     def _before_findall(self):
         pass
@@ -265,16 +324,15 @@ class Thing(object):
                 if not key in self._unsaved_items:
                     self._unsaved_items[key] = val
 
-        classname = self.__class__.__name__.lower()
-
         if self._primary_key in self._unsaved_items.keys():
-
             primary_key_val = self._unsaved_items.pop(self._primary_key)
             query = (self.table.update()
                     .where(getattr(self.table.c, self._primary_key) == primary_key_val)
                     .values(**self._unsaved_items))
             self._before_update()
+            start_time = time.time()
             db.execute(query)
+            self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
 
             query = self.table.select().where(getattr(self.table.c, self._primary_key) == primary_key_val)
             self._current_item = db.execute(query).first()
@@ -285,7 +343,9 @@ class Thing(object):
             primary_key_val = db.execute(query).inserted_primary_key[0]
 
             query = self.table.select().where(getattr(self.table.c, self._primary_key) == primary_key_val)
+            start_time = time.time()
             self._current_item = db.execute(query).first()
+            self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
             self._after_insert()
 
         self._unsaved_items = {}
@@ -293,17 +353,22 @@ class Thing(object):
 
     def delete(self):
         db = Thing._get_conn(self._tablename, False, self.sharding_strategy())
-        classname = self.__class__.__name__.lower()
-
-        self._before_delete()
 
         if self._primary_key in self._current_item.keys():
+            self._before_delete()
             pk = self._primary_key
             query = self.table.delete().where(getattr(self.table.c, pk) == self._current_item[pk])
+            start_time = time.time()
             rowcount = db.execute(query).rowcount
+            self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
         else:
+            self.__tobe_deleted_rows = self.table.select([self._primary_key]).query(and_(*self._filters)).findall()
+            self._before_delete()
             query = self.table.delete(and_(*self._filters))
+            self.__tobe_deleted_rows = []
+            start_time = time.time()
             rowcount = db.execute(query).rowcount
+            self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
 
         self._after_delete()
 
@@ -385,7 +450,11 @@ class Thing(object):
         else:
             query = select(self._selected_fields, and_(*self._filters))
 
+        start_time = time.time()
         result = db.execute(query).first()
+        self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
+
+        self._after_find(val)
 
         self._current_item = {} if not result else result
         # empty current filter
@@ -393,20 +462,25 @@ class Thing(object):
         self._selected_fields = [self.table]
         return self
 
-    def findall(self, limit = 20, offset = 0):
+    def findall(self, limit = -1, offset = 0):
         db = Thing._get_conn(self._tablename, True, self.sharding_strategy())
 
         query = partial(select, self._selected_fields)
         query = query(and_(*self._filters)) if self._filters else query()
 
-        query = query.order_by(self._order_by).limit(limit).offset(offset)
+        if limit == -1:
+            query = query.order_by(self._order_by).offset(offset)
+        else:
+            query = query.order_by(self._order_by).limit(limit).offset(offset)
 
         result = self._before_findall()
         if result:
             self._results = result
             return self
 
+        start_time = time.time()
         self._results = db.execute(query).fetchall()
+        self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
 
         # empty current filter
         self._filters = []
@@ -415,12 +489,24 @@ class Thing(object):
 
     def updateall(self, **fields):
         db = Thing._get_conn(self._tablename, False, self.sharding_strategy())
+
+        _query = partial(select, [self._primary_key])
+        _query = _query(and_(*self._filters)) if self._filters else _query()
+        self.__tobe_updated_rows = db.execute(_query).fetchall()
+        self._after_update()
+        self.__tobe_updated_rows = []
+
         update = self.table.update()
         if self._filters:
             for _filter in self._filters:
                 update = update.where(_filter)
         query = update.values(**fields)
-        rowcount = db.execute().rowcount
+
+
+        start_time = time.time()
+        rowcount = db.execute(query).rowcount
+        self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
+
         return rowcount
 
     def get_field(self, field):
@@ -452,11 +538,15 @@ class Thing(object):
         return results
 
     def __repr__(self):
-        if self._results:
-            return repr(self._results)
         if self._current_item:
             return repr(self._current_item)
-        return repr(self.__class__)
+        if self._results:
+            return repr(self._results)
+        return '<%s.%s object at %s>' % (
+            self.__class__.__module__,
+            self.__class__.__name__,
+            hex(id(self))
+        )
 
     def count(self):
         """
@@ -464,7 +554,9 @@ class Thing(object):
         """
         db = Thing._get_conn(self._tablename, True, self.sharding_strategy())
         query = select([func.count(getattr(self.table.c, self._primary_key))], and_(*self._filters))
+        start_time = time.time()
         result = db.execute(query).scalar()
+        self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
         return result
 
     def reset(self):

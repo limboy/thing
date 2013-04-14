@@ -1,6 +1,6 @@
 from setuptools import setup
 import os
-import thing.thing as thing
+import thing
 
 setup(
     name = thing.__name__,
@@ -18,6 +18,7 @@ setup(
     install_requires = [
         'sqlalchemy',
         'mysql-python',
+        'redis >= 2.7, <= 2.8',
     ],
     classifiers = [
         'Development Status :: 4 - Beta',
