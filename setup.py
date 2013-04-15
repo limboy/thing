@@ -10,7 +10,7 @@ setup(
     author = thing.__author__,
     author_email = 'healdream@gmail.com',
     description = 'lightweight SQLAlchemy based ORM',
-    long_description = 'doc: http://blog.leezhong.com/thing/',
+    long_description = open('README.md').read(),
     zip_safe = False,
     platforms = 'any',
     packages = ["thing"],
