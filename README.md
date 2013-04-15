@@ -12,331 +12,230 @@
 
 </pre>
 
-# What is Thing
+# Thing 是什么？
 
-Thing is a lightweight SQLAlchemy based ORM, powerful meanwhile flexible.
+Thing是一个基于SQLAlchemy的配置简单、使用简单且灵活的ORM。
 
-# Why Thing
+# 使用方法
 
-I like ORM, it's the way programmers deal with database. I like ROR's active record, though not all all them. I want it can be easily configured to master / slave, sharding mode, has validator, easy to be integrated with cache. SO I create Thing.
+举个简单的例子，假如有3个表：comment, post, user, 3个表的字段分别是：
 
-# Thing's Feature
-
-* master / slave mode can be easily configured, even sharding strategy can be easily implemented. 
-* has hook before / after CRUD, so you can easily implement cache strategy.
-* blinker's signal is triggered before CUD, make your application more loose couple.
-* integrated an validator (via formencode)
-* support profile
-* support ROR's dynamic query, like find_by_user_id, count_by_status
-
-# Installation
-
-`pip install thing`
-
-# Basic Usage
-
-suppose we have an user table like this:
-
+comment表:
 ```
-CREATE TABLE `user` (
-  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `username` varchar(50) DEFAULT NULL,
-  `password` varchar(40) DEFAULT NULL,
-  UNIQUE KEY `username` (`username`)
-) ENGINE=InnoDB CHARSET=utf8
++---------+------------------+------+-----+---------+----------------+
+| Field   | Type             | Null | Key | Default | Extra          |
++---------+------------------+------+-----+---------+----------------+
+| id      | int(11) unsigned | NO   | PRI | NULL    | auto_increment |
+| user_id | int(11)          | YES  | MUL | NULL    |                |
+| post_id | int(11)          | YES  | MUL | NULL    |                |
+| content | text             | YES  |     | NULL    |                |
++---------+------------------+------+-----+---------+----------------+
 ```
 
-## define user model
-
+post表：
 ```
-#user.py
-import thing
-class User(thing.Thing):
-     pass
-
-
-#conn.py
-import thing
-
-db_config = {
-        'master': {
-            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-            'echo': False,
-            },
-        'slave': {
-            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-            'echo': False,
-            },
-    }
-
-thing.Thing.db_config(db_config)
-
-
-#main.py
-import user
-import conn
-
-# create user
-user_id = user.User(
-    usernmae = 'foobar',
-    password = 'p@ssword',
-).save()
-
-# find user
-current_user = user.User().find(user_id)
-print current_user.username # 'foobar'
-
-# update user
-current_user.username = 'test'
-current_user.save()
-print current_user.name # 'test'
-
-# delete user
-user.User().find(user_id).delete()
++---------+------------------+------+-----+---------+----------------+
+| Field   | Type             | Null | Key | Default | Extra          |
++---------+------------------+------+-----+---------+----------------+
+| id      | int(11) unsigned | NO   | PRI | NULL    | auto_increment |
+| user_id | int(11)          | YES  | MUL | NULL    |                |
+| created | int(11)          | YES  |     | NULL    |                |
+| content | text             | YES  |     | NULL    |                |
+| title   | varchar(255)     | YES  |     | NULL    |                |
++---------+------------------+------+-----+---------+----------------+
 ```
 
-# Advanced Usage
-
-## query
-
+user表：
 ```
-import user
-import conn
-
-some_users = user.User().where('id', '<', 10).findall()
-print len(some_users) # 9
-for some_user in some_users:
-    print some_user.username
-
-some_users = user.User().select(['id']).where('id', '<', 10).order_by('-id').findall(limit=5, offset=5)
-
-user_ids = user.User().findall(limit=5).get_field('id') # [1, 2, 3, 4, 5]
-
-max_user_id = user.User().select(['max(id) as max_id']).find().max_id
++-------+------------------+------+-----+---------+----------------+
+| Field | Type             | Null | Key | Default | Extra          |
++-------+------------------+------+-----+---------+----------------+
+| id    | int(11) unsigned | NO   | PRI | NULL    | auto_increment |
+| name  | varchar(30)      | YES  |     | NULL    |                |
++-------+------------------+------+-----+---------+----------------+
 ```
 
-## update
+## 定义Model
+
+先来看看目录结构
+```
+├── __init.py__
+├── conn.py # 用于数据库连接
+├── models
+│   ├── __init__.py
+│   ├── comment.py
+│   ├── post.py
+│   ├── user.py
+└── test.py
+```
+test.py就是进行测试的地方，先来看看各个model的内容：
+
+### comment.py
 
 ```
-import user
-import conn
-
-user.User().where('id', '<', 10).updateall(username = 'foobar') # return 9 (affected rows)
-```
-
-## delete
-
-```
-import user
-import conn
-
-user.User().where('id', '<', 5).delete() # return 4 (affected rows)
-```
-
-## raw sql
-
-```
-import user
-import conn
-
-user.User().query('do some special query')
-```
-
-# Dynamic Method
-
-there are 4 kind of dynamic method: `find_by_{fields}`, `findall_by_{fields}`, `findall_in_{field}`, `count_by_{fields}`
-
-i.e.
-
-```
-import conn
-import user
-
-user.User().findall_in_id([1, 3, 5]) # find users whose id is 1, 3, 5
-
-user.User().find_by_id_and_username(3, 'foobar') # find user whose id is 3 and username is foobar
-
-user.User().count_by_id_and_username(4, 'john') # how many rows meets the condition: id = 4 and username = 'john'
-```
-
-borrowed from ROR, if you want to add cache, just implement the method you called, that's it, totally transparent.
-
-
-# Hooks
-
-there are currently 8 hooks:
-
-* _before_insert
-* _after_insert
-* _before_update
-* _after_update
-* _before_delete
-* _after_delete
-* _before_find
-* _before_findall
-
-if we want to add cache for the find method in User model, just implement some hooks
-
-```
-#user.py
-import thing
-import redis
-import json
-
-rc = redis.Redis()
-
-class User(thing.Thing):
-    def _before_insert(self):
-        rc.set('user:{0}'.format(self.id), json.dumps(self.to_dict()))
-
-    def _before_update(self):
-        self._before_insert()
-
-    def _before_read(self):
-        user = rc.get('user:{0}')
-        if user:
-            return json.loads(user)
-```
-
-# Signal
-
-suppose there are article and comment tables, article table has an field `comment_count`, so when a new comment added, article table should update its `comment_count` field. it can be done via signal.
-
-there are 8 built in signals
-
-* model.before_validation
-* model.after_validation
-* model.before_insert
-* model.after_insert
-* model.before_update
-* model.after_update
-* model.before_delete
-* model.after_delete
-
-```
-#article.py
-from blinker import signal
-import thing
-
-comment_add = signal('comment.after_insert')
-
-class Article(thing.Thing):
-    @comment_add.connect
-    def _comment_add(comment):
-        article = Article().find(comment.article_id)
-        article.comment_count += 1
-        article.save()
-
-#comment.py
 import thing
 
 class Comment(thing.Thing):
-    pass
-
-#trigger.py
-import conn
-import article, comment
-
-comment.Comment(content = 'hello world').save()
-# that's it, article's `comment_count` field will be updated.
+    _belongs_to = {
+            'post': {
+                'model': 'models.post.Post',
+                'foreign_key': 'post_id',
+                },
+            'author': {
+                'model': 'models.user.User',
+                'foreign_key': 'user_id',
+                },
+            }
 ```
 
-# validator
-
-validate is implemented via [formencode](http://www.formencode.org/en/latest/Validator.html)
-
-if we want to add some restrict to our User model's username field, it can be done like this:
+### post.py
 
 ```
 import thing
+
+class Post(thing.Thing):
+    _belongs_to = {
+            'author': {
+                'model': 'models.user.User',
+                'foreign_key': 'user_id',
+                }
+            }
+    _has_many = {
+            'comments': {
+                'model': 'models.comment.Comment',
+                'foreign_key': 'user_id',
+                }
+            }
+```
+
+### user.py
+
+```
+import thing
+
 class User(thing.Thing):
-    username = formencode.All(
-            validators.String(
-                 not_empty = True,
-                 strip = True,
-                 min = 4,
-                 max = 24,
-                 messages = {
-                     'empty': u'please enter an username',
-                     'tooLong': u'username too long',
-                     'tooShort': u'username too short'}),
-             validators.PlainText(messages = {
-                     'invalid': u'username can only contain "number", "_", "-" and "digit"'
-                  }))
+    _has_many = {
+            'posts': {
+                'model': 'models.post.Post',
+                'foreign_key': 'user_id'
+                },
+            'comments': {
+                'model':  'models.comment.Comment',
+                'foreign_key': 'user_id'
+                }
+            }
+```
 
-# if we want to save with invalid username, it can not be saved
+再来看看conn.py
 
+### conn.py
+
+```
+import thing
+
+config = {
+        'db': {
+            'master': {
+                'url': 'mysql://root:123456@127.0.0.1:3306/test?charset=utf8',
+                'echo': False,
+                },
+            'slave': {
+                'url': 'mysql://root:123456@127.0.0.1:3306/test?charset=utf8',
+                'echo': False,
+                },
+            },
+        'redis': {
+            'host': 'localhost',
+            'port': 6379,
+            'db': 1,
+            },
+        'thing': {
+            'debug': True,
+            }
+        }
+
+thing.Thing.config(config)
+```
+
+OK，万事具备，开工！
+
+```
+import conn
+from models.comment import Comment
+from models.user import User
+from models.post import Post
+
+# -------- 插入数据 --------
 user = User()
-user.username = '!@#$%^&'
+user.name = 'foo'
 user.save()
-print user.saved # False
-print user.errors # a dict contains error field and message
+# 或者 user = User(name='foo').save()
+
+# -------- 获取数据 --------
+user = User().find(1)
+print user.name
+
+# -------- 获取关联数据 -------
+posts = User().find(1).posts.findall()
+# 如果要设置offset / limit, 在findall里加入参数即可
+# posts = User().find(1).posts.findall(offset = 0, limit = 20)
+
+# ------- 删除数据 -------
+User().find(1).delete()
+
+# ------- 更新数据 -------
+user = User().find(1)
+user.name = 'bar'
+user.save()
 ```
 
-with the help of formencode, the validator can be very flexible.
+# 动态查询
 
-# Profile
+这个是受Rails影响，觉得很方便就拿来了。比如 `Post().count_by_user_id(3)`，就可以找到user_id为3的用户发表的文章数量。要获取`user_id`为3的用户发表的文章，可以`Post().findall_by_user_id(3, limit=20)`，比起`Post().where('user_id', '=', 3).findall()`更加简洁和明了。
 
-sqlalchemy will print sql execution information if debug is set to True, but it is unreadable and not so detail.
+# 关于性能和缓存
 
-```
-import thing
-import user
+Thing内置了Redis作为缓存，你甚至都不需要知道Redis的存在，正常该怎么用还怎么用，Thing会自动处理缓存的生成、读取、过期、删除等操作。
 
-thing.Thing.enable_profile()
-user.User().findall()
-# any other db related operation
-print thing.Thing.get_sql_stats # a dict with total_time, query_count, and executed query
-```
-
-# Partition
-
-Thing support master / slave natively. if you have do some vertical partition, and the partition has its own master / slave, it's OK. if you have domain related sharding strategy, just implement `sharding_strategy` method.
-
-take this db_config as an example.
+假设表posts里有5条数据，在获取每条post后，还想获取该post对应的用户信息，代码如下：
 
 ```
-db_config = {
-        'master': {
-            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-            'echo': False,
-            },
-        'slave': {
-            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-            'echo': False,
-            },
-        'user.master': {
-            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-            'echo': False,
-            },
-        'user.slave': {
-            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-            'echo': False,
-            },
-        'article.sharding1': {
-            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-            'echo': False,
-            },
-        'article.sharding2': {
-            'url': 'mysql://username:password@127.0.0.1:3306/dbname?charset=utf8',
-            'echo': False,
-            },
-    }
+posts = Post().findall(limit=5)
+
+for post in posts:
+	print post.author
 ```
 
-article model's implementation
+在开启Debug的情况下，可以在终端看到如下显示：
 
 ```
-import thing
-
-class Article(thing.Thing):
-    def sharding_strategy(self):
-        if self.id % 2 == 0:
-            return 'sharding1'
-        else:
-            return 'sharding2'
+DEBUG - [cost:0.0032] - SELECT post.id, post.user_id, post.created, post.content, post.title
+FROM post ORDER BY post.id DESC
+LIMIT -1 OFFSET :param_1
+DEBUG - Cache Read: thing.User:1
+{u'id': 1, u'name': u'lzyy'}
+DEBUG - Cache Read: thing.User:1
+{u'id': 1, u'name': u'lzyy'}
+DEBUG - Cache Read: thing.User:1
+{u'id': 1, u'name': u'lzyy'}
+DEBUG - Cache Read: thing.User:1
+{u'id': 1, u'name': u'lzyy'}
+DEBUG - Cache Read: thing.User:1
+{u'id': 1, u'name': u'lzyy'}
 ```
 
-* user model's db write operation will go to `user.master` section, read go to `user.slave`
-* article model's id is even, go to sharding1 else go to sharding2
-* comment model's db write operation will go to `master` section, read go to `slave`
+可以看到用户的信息都是从缓存中读取的，所以不用担心n+1的问题。
+假如用户的信息被更新，缓存也会自动更新。
+
+# 其他
+
+* 配置信息里的`master`和`slave`为必选项，可以相同。Thing会根据不同的查询，自动找到对应的db。如find/findall会找slave，update/delete会找master。
+* 配置信息里的redis项为必选项。
+* 动态查询目前支持`find_by`, `findall_by`, `findall_in`, `count_by`
+* 内置了8个钩子，会在相应的事件发生时被调用，分别是：`_before_insert`,`_after_insert`,`_before_update`,`_after_update`,`_before_delete`,`_after_delete`,`_before_find`,`_after_find`，可以在子类里覆盖这些方法来实现自己的逻辑。
+* 复杂的SQL可以使用`execute`方法，返回的结果是SQLAlchemy的ResultProxy
+* 如果要一次更新多处的话，可以使用`updateall`方法，`Post().where('user_id', '=', 1).updateall(user_id=2)`
+* 表名如果和小写的类名不一样的话，可以在子类里重新设置`_tablename`
+* 每个表一定要有主键，默认为`id`，可以在子类里重新设置`_primary_key`
+* 支持has_many和belongs_to，可以在子类里定义`_has_many`和`_belongs_to`
+* 没有`join`方法

@@ -5,10 +5,9 @@ import json
 import sys
 import redis
 from sqlalchemy import Table, MetaData, create_engine
-from sqlalchemy.sql import select, func, and_, compiler
+from sqlalchemy.sql import select, func, and_
 from sqlalchemy.sql.expression import label
 from functools import partial
-from MySQLdb.converters import conversions, escape
 
 class AttributeDict(dict):
     __getattr__ = dict.__getitem__
@@ -93,7 +92,7 @@ class Thing(object):
         return query
 
     @staticmethod
-    def _get_conn(table_name, is_read, sharding = None):
+    def _get_conn(table_name, is_read):
         """
         if this is read operation and table_name.slave exists in config['db'], then this section is used
         else slave section will be used
@@ -101,10 +100,7 @@ class Thing(object):
         if this is write operation and table_name.master exists in config['db'], then this section is used
         else master section will be used
         """
-        if sharding:
-            section = '%s.%s' % (table_name, sharding)
-        else:
-            section = '%s.%s' % (table_name, 'slave' if is_read else 'master')
+        section = '%s.%s' % (table_name, 'slave' if is_read else 'master')
         if not section in Thing._config['db']:
             # make sure there is 'slave' and 'master' section in config['db']
             section = 'slave' if is_read else 'master'
@@ -119,14 +115,6 @@ class Thing(object):
         if Thing._db_conn[section].closed:
             Thing._db_conn[section].connect()
         return Thing._db_conn[section]
-
-    def sharding_strategy(self):
-        """
-        override this method to implenment your sharding strategy
-        if there is `user.master.sharding1` in config['db'], and you
-        want to use it, return sharding1
-        """
-        pass
 
     def __init__(self, **fields):
         """
@@ -159,7 +147,7 @@ class Thing(object):
         """
         execute raw sql
         """
-        db = Thing._get_conn(self._tablename, is_read, self.sharding_strategy())
+        db = Thing._get_conn(self._tablename, is_read)
         return db.execute(query_str)
 
     def __delattr__(self, key):
@@ -180,7 +168,8 @@ class Thing(object):
         if key in self._unsaved_items:
             return self._unsaved_items[key]
         elif key in self._current_item:
-            value = getattr(self._current_item, key)
+            # value = getattr(self._current_item, key)
+            value = self._current_item[key]
             return '' if value is None else value
         elif key[:8] == 'find_by_':
             if key.find('_and_') == -1:
@@ -316,7 +305,7 @@ class Thing(object):
         pass
 
     def save(self):
-        db = Thing._get_conn(self._tablename, False, self.sharding_strategy())
+        db = Thing._get_conn(self._tablename, False)
 
         # fill the _unsaved_items with _current_item if not empty
         if self._current_item:
@@ -352,7 +341,7 @@ class Thing(object):
         return primary_key_val
 
     def delete(self):
-        db = Thing._get_conn(self._tablename, False, self.sharding_strategy())
+        db = Thing._get_conn(self._tablename, False)
 
         if self._primary_key in self._current_item.keys():
             self._before_delete()
@@ -380,7 +369,7 @@ class Thing(object):
         get current table info
         """
         if Thing._table_schemas.get(self._tablename, None) is None:
-            conn = Thing._get_conn(self._tablename, True, self.sharding_strategy())
+            conn = Thing._get_conn(self._tablename, True)
             Thing._table_schemas[self._tablename] = Table(self._tablename, MetaData(), autoload = True, autoload_with = conn)
         return Thing._table_schemas[self._tablename]
 
@@ -440,7 +429,7 @@ class Thing(object):
         return self
 
     def find(self, val = None):
-        db = Thing._get_conn(self._tablename, True, self.sharding_strategy())
+        db = Thing._get_conn(self._tablename, True)
         if val:
             result = self._before_find(val)
             if result:
@@ -463,7 +452,7 @@ class Thing(object):
         return self
 
     def findall(self, limit = -1, offset = 0):
-        db = Thing._get_conn(self._tablename, True, self.sharding_strategy())
+        db = Thing._get_conn(self._tablename, True)
 
         query = partial(select, self._selected_fields)
         query = query(and_(*self._filters)) if self._filters else query()
@@ -488,7 +477,7 @@ class Thing(object):
         return self
 
     def updateall(self, **fields):
-        db = Thing._get_conn(self._tablename, False, self.sharding_strategy())
+        db = Thing._get_conn(self._tablename, False)
 
         _query = partial(select, [self._primary_key])
         _query = _query(and_(*self._filters)) if self._filters else _query()
@@ -552,7 +541,7 @@ class Thing(object):
         """
         get current query's count
         """
-        db = Thing._get_conn(self._tablename, True, self.sharding_strategy())
+        db = Thing._get_conn(self._tablename, True)
         query = select([func.count(getattr(self.table.c, self._primary_key))], and_(*self._filters))
         start_time = time.time()
         result = db.execute(query).scalar()
