@@ -197,7 +197,7 @@ user.save()
 
 Thing内置了Redis作为缓存，你甚至都不需要知道Redis的存在，正常该怎么用还怎么用，Thing会自动处理缓存的生成、读取、过期、删除等操作。
 
-假设表posts里有5条数据，在获取每条post后，还想获取该post对应的用户信息，代码如下：
+假设表post里有5条数据，在获取每条post后，还想获取该post对应的用户信息，代码如下：
 
 ```
 posts = Post().findall(limit=5)
@@ -211,7 +211,7 @@ for post in posts:
 ```
 DEBUG - [cost:0.0032] - SELECT post.id, post.user_id, post.created, post.content, post.title
 FROM post ORDER BY post.id DESC
-LIMIT -1 OFFSET :param_1
+LIMIT :param_1 OFFSET :param_2
 DEBUG - Cache Read: thing.User:1
 {u'id': 1, u'name': u'lzyy'}
 DEBUG - Cache Read: thing.User:1
