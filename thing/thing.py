@@ -73,7 +73,8 @@ class Thing(object):
         """
         Thing._config = config
         Thing._db_conn = {}
-        Thing._redis_conn = redis.StrictRedis(host=config['redis']['host'], port=config['redis']['port'], db=config['redis']['db'])
+        if Thing._config.get('redis'):
+            Thing._redis_conn = redis.StrictRedis(host=config['redis']['host'], port=config['redis']['port'], db=config['redis']['db'])
 
     def debug(self, message):
         if Thing._config['thing'].get('debug'):
@@ -110,11 +111,10 @@ class Thing(object):
         if not Thing._db_conn.get(section):
             url = Thing._config['db'][section]['url']
             kwargs = {k:v for k, v in Thing._config['db'][section].items() if k != 'url'}
-            Thing._db_conn[section]= create_engine(url, **kwargs).connect().execution_options(autocommit=True)
+            Thing._db_conn[section]= create_engine(url, **kwargs)
 
-        if Thing._db_conn[section].closed:
-            Thing._db_conn[section].connect()
-        return Thing._db_conn[section]
+        conn = Thing._db_conn[section].connect().execution_options(autocommit=True)
+        return conn
 
     def __init__(self, **fields):
         """
@@ -147,8 +147,10 @@ class Thing(object):
         """
         execute raw sql
         """
-        db = Thing._get_conn(self._tablename, is_read)
-        return db.execute(query_str)
+        conn = Thing._get_conn(self._tablename, is_read)
+        result = conn.execute(query_str)
+        conn.close()
+        return result
 
     def __delattr__(self, key):
         if key in self._current_item:
@@ -261,33 +263,37 @@ class Thing(object):
         pass
 
     def _after_insert(self):
-        Thing._redis_conn.set('thing.%s:%s' % (self.__class__.__name__, self._current_item[self._primary_key]),
+        if Thing._config.get('redis'):
+            Thing._redis_conn.set('thing.%s:%s' % (self.__class__.__name__, self._current_item[self._primary_key]),
                 json.dumps(self.to_dict()))
 
     def _after_update(self):
-        if self.__tobe_updated_rows:
-            for row in self.__tobe_updated_rows:
-                Thing._redis_conn.delete('thing.%s:%s' % (self.__class__.__name__, row[self._primary_key]))
-        elif self._current_item:
-            self._after_insert()
+        if Thing._config.get('redis'):
+            if self.__tobe_updated_rows:
+                for row in self.__tobe_updated_rows:
+                    Thing._redis_conn.delete('thing.%s:%s' % (self.__class__.__name__, row[self._primary_key]))
+            elif self._current_item:
+                self._after_insert()
 
     def _before_delete(self):
-        if self._primary_key in self._current_item.keys():
-            Thing._redis_conn.delete('thing.%s:%s' % (self.__class__.__name__, self._current_item[self._primary_key]))
-        elif self.__tobe_deleted_rows:
-            for row in self.__tobe_deleted_rows:
-                Thing._redis_conn.delete('thing.%s:%s' % (self.__class__.__name__, row[self._primary_key]))
+        if Thing._config.get('redis'):
+            if self._primary_key in self._current_item.keys():
+                Thing._redis_conn.delete('thing.%s:%s' % (self.__class__.__name__, self._current_item[self._primary_key]))
+            elif self.__tobe_deleted_rows:
+                for row in self.__tobe_deleted_rows:
+                    Thing._redis_conn.delete('thing.%s:%s' % (self.__class__.__name__, row[self._primary_key]))
 
     def _after_delete(self):
         pass
 
     def _before_find(self, val):
-        key_name = 'thing.%s:%s' % (self.__class__.__name__, val)
-        result = Thing._redis_conn.get(key_name)
-        if result:
-            result = json.loads(result)
-            self.debug('Cache Read: %s' % key_name)
-        return result
+        if Thing._config.get('redis'):
+            key_name = 'thing.%s:%s' % (self.__class__.__name__, val)
+            result = Thing._redis_conn.get(key_name)
+            if result:
+                result = json.loads(result)
+                self.debug('Cache Read: %s' % key_name)
+            return result
 
     def _after_find(self, val):
         if not val:
@@ -296,16 +302,17 @@ class Thing(object):
             else:
                 val = getattr(self,_current_item, self._primary_key)
 
-        key_name = 'thing.%s:%s' % (self.__class__.__name__, val)
-        result = Thing._redis_conn.get(key_name)
-        if not result:
-            Thing._redis_conn.set(key_name, json.dumps(self.to_dict()))
+        if Thing._config.get('redis'):
+            key_name = 'thing.%s:%s' % (self.__class__.__name__, val)
+            result = Thing._redis_conn.get(key_name)
+            if not result:
+                Thing._redis_conn.set(key_name, json.dumps(self.to_dict()))
 
     def _before_findall(self):
         pass
 
     def save(self):
-        db = Thing._get_conn(self._tablename, False)
+        conn = Thing._get_conn(self._tablename, False)
 
         # fill the _unsaved_items with _current_item if not empty
         if self._current_item:
@@ -320,35 +327,36 @@ class Thing(object):
                     .values(**self._unsaved_items))
             self._before_update()
             start_time = time.time()
-            db.execute(query)
+            conn.execute(query)
             self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
 
             query = self.table.select().where(getattr(self.table.c, self._primary_key) == primary_key_val)
-            self._current_item = db.execute(query).first()
+            self._current_item = conn.execute(query).first()
             self._after_update()
         else:
             self._before_insert()
             query = self.table.insert().values(**self._unsaved_items)
-            primary_key_val = db.execute(query).inserted_primary_key[0]
+            primary_key_val = conn.execute(query).inserted_primary_key[0]
 
             query = self.table.select().where(getattr(self.table.c, self._primary_key) == primary_key_val)
             start_time = time.time()
-            self._current_item = db.execute(query).first()
+            self._current_item = conn.execute(query).first()
             self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
             self._after_insert()
 
         self._unsaved_items = {}
+        conn.close()
         return primary_key_val
 
     def delete(self):
-        db = Thing._get_conn(self._tablename, False)
+        conn = Thing._get_conn(self._tablename, False)
 
         if self._primary_key in self._current_item.keys():
             self._before_delete()
             pk = self._primary_key
             query = self.table.delete().where(getattr(self.table.c, pk) == self._current_item[pk])
             start_time = time.time()
-            rowcount = db.execute(query).rowcount
+            rowcount = conn.execute(query).rowcount
             self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
         else:
             self.__tobe_deleted_rows = self.table.select([self._primary_key]).query(and_(*self._filters)).findall()
@@ -356,11 +364,11 @@ class Thing(object):
             query = self.table.delete(and_(*self._filters))
             self.__tobe_deleted_rows = []
             start_time = time.time()
-            rowcount = db.execute(query).rowcount
+            rowcount = conn.execute(query).rowcount
             self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
 
         self._after_delete()
-
+        conn.close()
         return rowcount
 
     @property
@@ -429,7 +437,7 @@ class Thing(object):
         return self
 
     def find(self, val = None):
-        db = Thing._get_conn(self._tablename, True)
+        conn = Thing._get_conn(self._tablename, True)
         if val:
             result = self._before_find(val)
             if result:
@@ -440,7 +448,7 @@ class Thing(object):
             query = select(self._selected_fields, and_(*self._filters))
 
         start_time = time.time()
-        result = db.execute(query).first()
+        result = conn.execute(query).first()
         self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
 
         self._after_find(val)
@@ -449,10 +457,11 @@ class Thing(object):
         # empty current filter
         self._filters = []
         self._selected_fields = [self.table]
+        conn.close()
         return self
 
     def findall(self, limit = -1, offset = 0):
-        db = Thing._get_conn(self._tablename, True)
+        conn = Thing._get_conn(self._tablename, True)
 
         query = partial(select, self._selected_fields)
         query = query(and_(*self._filters)) if self._filters else query()
@@ -468,20 +477,21 @@ class Thing(object):
             return self
 
         start_time = time.time()
-        self._results = db.execute(query).fetchall()
+        self._results = conn.execute(query).fetchall()
         self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
 
         # empty current filter
         self._filters = []
         self._selected_fields = [self.table]
+        conn.close()
         return self
 
     def updateall(self, **fields):
-        db = Thing._get_conn(self._tablename, False)
+        conn = Thing._get_conn(self._tablename, False)
 
         _query = partial(select, [self._primary_key])
         _query = _query(and_(*self._filters)) if self._filters else _query()
-        self.__tobe_updated_rows = db.execute(_query).fetchall()
+        self.__tobe_updated_rows = conn.execute(_query).fetchall()
         self._after_update()
         self.__tobe_updated_rows = []
 
@@ -493,8 +503,9 @@ class Thing(object):
 
 
         start_time = time.time()
-        rowcount = db.execute(query).rowcount
+        rowcount = conn.execute(query).rowcount
         self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
+        conn.close()
 
         return rowcount
 
@@ -541,11 +552,12 @@ class Thing(object):
         """
         get current query's count
         """
-        db = Thing._get_conn(self._tablename, True)
+        conn = Thing._get_conn(self._tablename, True)
         query = select([func.count(getattr(self.table.c, self._primary_key))], and_(*self._filters))
         start_time = time.time()
-        result = db.execute(query).scalar()
+        result = conn.execute(query).scalar()
         self.debug('[cost:%.4f] - %s' % (time.time() - start_time, query))
+        conn.close()
         return result
 
     def reset(self):

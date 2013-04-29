@@ -239,3 +239,14 @@ DEBUG - Cache Read: thing.User:1
 * 每个表一定要有主键，默认为`id`，可以在子类里重新设置`_primary_key`
 * 支持has_many和belongs_to，可以在子类里定义`_has_many`和`_belongs_to`
 * 没有`join`方法
+
+# ChangeLog
+
+## 0.3.2
+* 修复了并发情况下会出现「Exception _mysql_exceptions.ProgrammingError: (2014, "Commands out of sync; you can't run this command now"」错误。
+* Redis缓存变为可配置项。如果不想要Redis的话，在config里取消`Redis`配置即可。
+
+## 0.3.1
+* 取消了对Validation的支持
+* 取消了对Sharding和Partition的支持
+* 取消了事件分发机制
