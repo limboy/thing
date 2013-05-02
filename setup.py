@@ -1,5 +1,6 @@
 from setuptools import setup
 import os
+import sys
 import thing
 
 if sys.argv[-1] == 'publish':
