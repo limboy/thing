@@ -3,7 +3,10 @@ import time
 import logging
 import json
 import sys
-import redis
+try:
+    import redis
+except ImportError as e:
+    pass
 from sqlalchemy import Table, MetaData, create_engine
 from sqlalchemy.sql import select, func, and_
 from sqlalchemy.sql.expression import label

@@ -2,6 +2,10 @@ from setuptools import setup
 import os
 import thing
 
+if sys.argv[-1] == 'publish':
+    os.system('python setup.py sdist upload')
+    sys.exit()
+
 setup(
     name = thing.__name__,
     version = thing.__version__,
@@ -18,7 +22,6 @@ setup(
     install_requires = [
         'sqlalchemy',
         'mysql-python',
-        'redis >= 2.7, <= 2.8',
     ],
     classifiers = [
         'Development Status :: 4 - Beta',

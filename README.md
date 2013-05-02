@@ -73,7 +73,7 @@ test.py就是进行测试的地方，先来看看各个model的内容：
 ### comment.py
 
 ```
-import thing
+from thing import thing
 
 class Comment(thing.Thing):
     _belongs_to = {
@@ -91,7 +91,7 @@ class Comment(thing.Thing):
 ### post.py
 
 ```
-import thing
+from thing import thing
 
 class Post(thing.Thing):
     _belongs_to = {
@@ -111,7 +111,7 @@ class Post(thing.Thing):
 ### user.py
 
 ```
-import thing
+from thing import thing
 
 class User(thing.Thing):
     _has_many = {
@@ -131,7 +131,7 @@ class User(thing.Thing):
 ### conn.py
 
 ```
-import thing
+from thing import thing
 
 config = {
         'db': {
@@ -241,6 +241,11 @@ DEBUG - Cache Read: thing.User:1
 * 没有`join`方法
 
 # ChangeLog
+
+## 0.3.3
+* 修复无法从pip安装的bug
+* 修复安装时对redis-py的依赖
+* `import thing`变为`from thing import thing`
 
 ## 0.3.2
 * 修复了并发情况下会出现「Exception _mysql_exceptions.ProgrammingError: (2014, "Commands out of sync; you can't run this command now"」错误。
